@@ -16,23 +16,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies and Build Web
+      - name: Create Web Distribution Directory
         run: |
-          npm init -y
-          npm install react react-dom
-          npm install @vitejs/plugin-react vite --save-dev
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          echo "import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; export default defineConfig({ plugins: [react()] });" > vite.config.js
-          echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Labour App</title></head><body><div id="root"></div><script type="module" src="/src/App.jsx"></script></body></html>' > index.html
-          mkdir -p src && mv App.jsx src/App.jsx
-          echo "import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App.jsx'; ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);" > src/main.jsx
-          npx vite build
-
-      - name: Setup Capacitor and Android Build
-        run: |
-          npx cap init "King Off Group" "com.kingoff.labourapp" --web-dir=dist
-          npx cap add android
-          npx cap sync
+          mkdir -p dist
+          echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Labour App</title><script src="https://unpkg.com/react@18/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script></head><body style="margin:0;font-family:sans-serif;background:#f4f4f9;"><div id="root"></div><script type="module">' > dist/index.html
+          cat App.jsx >> dist/index.html
+          echo '</script></body></html>' >> dist/index.html
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -40,13 +29,23 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Build Android APK
+      - name: Initialize Android Studio Project
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "King Off Group" "com.kingoff.labourapp" --web-dir=dist
+          npx cap add android
+          npx cap sync
+
+      - name: Build Final Android APK
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK Download Link
         uses: actions/upload-artifact@v4
         with:
           name: LabourApp-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          
