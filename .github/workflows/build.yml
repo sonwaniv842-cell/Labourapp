@@ -1,0 +1,55 @@
+name: Build Android APK
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: |
+          npm init -y
+          npm install react react-dom
+          npm install @vitejs/plugin-react vite --save-dev
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          echo "import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; export default defineConfig({ plugins: [react()] });" > vite.config.js
+          echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Labour App</title></head><body><div id="root"></div><script type="module" src="/src/App.jsx"></script></body></html>' > index.html
+          mkdir -p src && mv App.jsx src/App.jsx
+          echo "import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App.jsx'; ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);" > src/main.jsx
+
+      - name: Build Web Project
+        run: |
+          npx vite build
+
+      - name: Setup Capacitor and Android
+        run: |
+          npx cap init "King Off Group" "com.kingoff.labourapp" --web-dir=dist
+          npx cap add android
+          npx cap sync
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Build Android APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LabourApp-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
