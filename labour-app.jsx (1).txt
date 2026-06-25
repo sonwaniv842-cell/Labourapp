@@ -1,0 +1,303 @@
+import { useState, useEffect } from "react";
+
+const WAGE_RATES = { full: 1, half: 0.5, absent: 0 };
+
+const initialWorkers = [
+  { id: 1, name: "Ramesh Kumar", dailyWage: 400 },
+  { id: 2, name: "Sunita Bai", dailyWage: 350 },
+  { id: 3, name: "Mohan Lal", dailyWage: 450 },
+];
+
+function getTodayDate() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("hi-IN", { day: "numeric", month: "long", year: "numeric" });
+}
+
+export default function LabourApp() {
+  const [screen, setScreen] = useState("home"); // home, attendance, workers, addWorker, report
+  const [workers, setWorkers] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("workers")) || initialWorkers; } catch { return initialWorkers; }
+  });
+  const [attendance, setAttendance] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("attendance")) || {}; } catch { return {}; }
+  });
+  const [selectedDate, setSelectedDate] = useState(getTodayDate());
+  const [newWorker, setNewWorker] = useState({ name: "", dailyWage: "" });
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("workers", JSON.stringify(workers));
+  }, [workers]);
+
+  useEffect(() => {
+    localStorage.setItem("attendance", JSON.stringify(attendance));
+  }, [attendance]);
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  }
+
+  function markAttendance(workerId, status) {
+    setAttendance(prev => ({
+      ...prev,
+      [selectedDate]: { ...(prev[selectedDate] || {}), [workerId]: status }
+    }));
+  }
+
+  function getStatus(workerId) {
+    return (attendance[selectedDate] || {})[workerId] || null;
+  }
+
+  function addWorker() {
+    if (!newWorker.name.trim() || !newWorker.dailyWage) {
+      showToast("❌ Naam aur daily wage bharo"); return;
+    }
+    const w = { id: Date.now(), name: newWorker.name.trim(), dailyWage: Number(newWorker.dailyWage) };
+    setWorkers(prev => [...prev, w]);
+    setNewWorker({ name: "", dailyWage: "" });
+    showToast("✅ Worker add ho gaya!");
+    setScreen("workers");
+  }
+
+  function deleteWorker(id) {
+    if (window.confirm("Is worker ko delete karein?")) {
+      setWorkers(prev => prev.filter(w => w.id !== id));
+      showToast("Worker delete ho gaya");
+    }
+  }
+
+  // Calculate total earnings for a worker
+  function workerTotal(workerId) {
+    const worker = workers.find(w => w.id === workerId);
+    if (!worker) return 0;
+    let total = 0;
+    Object.entries(attendance).forEach(([date, dayData]) => {
+      const status = dayData[workerId];
+      if (status) total += worker.dailyWage * WAGE_RATES[status];
+    });
+    return total;
+  }
+
+  // Get report for a date range
+  function getMonthReport() {
+    const month = selectedDate.slice(0, 7);
+    const days = Object.keys(attendance).filter(d => d.startsWith(month));
+    return workers.map(worker => {
+      let present = 0, half = 0, absent = 0, earned = 0;
+      days.forEach(d => {
+        const s = (attendance[d] || {})[worker.id];
+        if (s === "full") { present++; earned += worker.dailyWage; }
+        else if (s === "half") { half++; earned += worker.dailyWage * 0.5; }
+        else if (s === "absent") absent++;
+      });
+      return { ...worker, present, half, absent, earned, days: days.length };
+    });
+  }
+
+  const statusStyle = (status, current) => ({
+    padding: "8px 16px",
+    borderRadius: 20,
+    border: "2px solid",
+    borderColor: current === status ? (status === "full" ? "#16a34a" : status === "half" ? "#d97706" : "#dc2626") : "#e5e7eb",
+    background: current === status ? (status === "full" ? "#dcfce7" : status === "half" ? "#fef3c7" : "#fee2e2") : "#fff",
+    color: current === status ? (status === "full" ? "#16a34a" : status === "half" ? "#d97706" : "#dc2626") : "#9ca3af",
+    fontWeight: current === status ? 700 : 400,
+    cursor: "pointer",
+    fontSize: 13,
+  });
+
+  return (
+    <div style={{ maxWidth: 430, margin: "0 auto", minHeight: "100vh", background: "#f8fafc", fontFamily: "'Segoe UI', sans-serif", position: "relative" }}>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: "#1e293b", color: "#fff", padding: "10px 24px", borderRadius: 24, zIndex: 999, fontSize: 14, boxShadow: "0 4px 20px #0004" }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #7c2d12, #b91c1c, #dc2626)", color: "#fff", padding: "20px 20px 16px", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 4px 12px #0003" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {screen !== "home" && (
+            <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "#fff", fontSize: 22, cursor: "pointer", padding: 0 }}>←</button>
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 24 }}>👑</span>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>KING OFF GROUP</div>
+                <div style={{ fontSize: 11, opacity: 0.85 }}>🏗️ मज़दूर हाजिरी & Payment App</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: 16 }}>
+
+        {/* HOME */}
+        {screen === "home" && (
+          <div>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 2px 8px #0001" }}>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 4 }}>आज की तारीख</div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: "#1e293b" }}>{formatDate(getTodayDate())}</div>
+              <div style={{ marginTop: 8, fontSize: 13, color: "#3b82f6" }}>
+                {workers.length} मज़दूर | {Object.keys(attendance[getTodayDate()] || {}).length} की हाजिरी लगी
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {[
+                { icon: "📋", label: "हाजिरी लगाओ", sub: "Attendance", key: "attendance", color: "#eff6ff", border: "#bfdbfe" },
+                { icon: "👷", label: "मज़दूर देखो", sub: "Workers", key: "workers", color: "#f0fdf4", border: "#bbf7d0" },
+                { icon: "💰", label: "पैसा देखो", sub: "Payment Report", key: "report", color: "#fefce8", border: "#fde68a" },
+                { icon: "➕", label: "मज़दूर जोड़ो", sub: "Add Worker", key: "addWorker", color: "#fdf4ff", border: "#e9d5ff" },
+              ].map(item => (
+                <button key={item.key} onClick={() => setScreen(item.key)} style={{ background: item.color, border: `2px solid ${item.border}`, borderRadius: 16, padding: "20px 12px", cursor: "pointer", textAlign: "center" }}>
+                  <div style={{ fontSize: 32 }}>{item.icon}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#1e293b", marginTop: 8 }}>{item.label}</div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{item.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ATTENDANCE */}
+        {screen === "attendance" && (
+          <div>
+            <div style={{ background: "#fff", borderRadius: 12, padding: 12, marginBottom: 16, boxShadow: "0 1px 4px #0001" }}>
+              <label style={{ fontSize: 13, color: "#64748b" }}>तारीख चुनो:</label>
+              <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+                style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 15, boxSizing: "border-box" }} />
+            </div>
+
+            {workers.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#94a3b8", padding: 40 }}>कोई मज़दूर नहीं है। पहले मज़दूर जोड़ो।</div>
+            ) : (
+              workers.map(worker => {
+                const status = getStatus(worker.id);
+                return (
+                  <div key={worker.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: "0 1px 4px #0001" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 15 }}>{worker.name}</div>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>₹{worker.dailyWage} / दिन</div>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#3b82f6", fontWeight: 600 }}>
+                        {status === "full" ? "✅ पूरा दिन" : status === "half" ? "🌗 आधा दिन" : status === "absent" ? "❌ गैरहाजिर" : "—"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => markAttendance(worker.id, "full")} style={statusStyle("full", status)}>✅ हाजिर</button>
+                      <button onClick={() => markAttendance(worker.id, "half")} style={statusStyle("half", status)}>🌗 आधा</button>
+                      <button onClick={() => markAttendance(worker.id, "absent")} style={statusStyle("absent", status)}>❌ गैर</button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            {workers.length > 0 && (
+              <button onClick={() => { showToast("✅ हाजिरी Save हो गई!"); }} style={{ width: "100%", padding: 14, background: "#1e40af", color: "#fff", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: "pointer", marginTop: 4 }}>
+                💾 हाजिरी Save करो
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* WORKERS LIST */}
+        {screen === "workers" && (
+          <div>
+            <button onClick={() => setScreen("addWorker")} style={{ width: "100%", padding: 12, background: "#1e40af", color: "#fff", border: "none", borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: "pointer", marginBottom: 16 }}>
+              ➕ नया मज़दूर जोड़ो
+            </button>
+            {workers.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#94a3b8", padding: 40 }}>कोई मज़दूर नहीं है।</div>
+            ) : (
+              workers.map(worker => (
+                <div key={worker.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: "0 1px 4px #0001", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{worker.name}</div>
+                    <div style={{ fontSize: 13, color: "#64748b" }}>₹{worker.dailyWage} / दिन</div>
+                    <div style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>कुल कमाई: ₹{workerTotal(worker.id)}</div>
+                  </div>
+                  <button onClick={() => deleteWorker(worker.id)} style={{ background: "#fee2e2", border: "none", color: "#dc2626", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 18 }}>🗑️</button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ADD WORKER */}
+        {screen === "addWorker" && (
+          <div>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px #0001" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: "#1e293b" }}>नया मज़दूर जोड़ो</div>
+              <label style={{ fontSize: 13, color: "#64748b" }}>मज़दूर का नाम *</label>
+              <input value={newWorker.name} onChange={e => setNewWorker(p => ({ ...p, name: e.target.value }))}
+                placeholder="जैसे: Ramesh Kumar"
+                style={{ display: "block", width: "100%", marginTop: 4, marginBottom: 16, padding: "10px 12px", borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 15, boxSizing: "border-box" }} />
+              <label style={{ fontSize: 13, color: "#64748b" }}>रोज़ की मज़दूरी (₹) *</label>
+              <input type="number" value={newWorker.dailyWage} onChange={e => setNewWorker(p => ({ ...p, dailyWage: e.target.value }))}
+                placeholder="जैसे: 400"
+                style={{ display: "block", width: "100%", marginTop: 4, marginBottom: 20, padding: "10px 12px", borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 15, boxSizing: "border-box" }} />
+              <button onClick={addWorker} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg, #b91c1c, #dc2626)", color: "#fff", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
+                ➕ मज़दूर जोड़ो
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* REPORT */}
+        {screen === "report" && (
+          <div>
+            <div style={{ background: "#fff", borderRadius: 12, padding: 12, marginBottom: 16, boxShadow: "0 1px 4px #0001" }}>
+              <label style={{ fontSize: 13, color: "#64748b" }}>महीना चुनो:</label>
+              <input type="month" value={selectedDate.slice(0, 7)} onChange={e => setSelectedDate(e.target.value + "-01")}
+                style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 15, boxSizing: "border-box" }} />
+            </div>
+
+            {getMonthReport().map(w => (
+              <div key={w.id} style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, boxShadow: "0 1px 4px #0001" }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{w.name}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div style={{ background: "#dcfce7", borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a" }}>{w.present}</div>
+                    <div style={{ fontSize: 11, color: "#16a34a" }}>हाजिर</div>
+                  </div>
+                  <div style={{ background: "#fef3c7", borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#d97706" }}>{w.half}</div>
+                    <div style={{ fontSize: 11, color: "#d97706" }}>आधा दिन</div>
+                  </div>
+                  <div style={{ background: "#fee2e2", borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#dc2626" }}>{w.absent}</div>
+                    <div style={{ fontSize: 11, color: "#dc2626" }}>गैरहाजिर</div>
+                  </div>
+                </div>
+                <div style={{ background: "#eff6ff", borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: "#1e40af" }}>कुल कमाई इस महीने</span>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: "#1e40af" }}>₹{w.earned}</span>
+                </div>
+              </div>
+            ))}
+
+            {/* Total */}
+            <div style={{ background: "linear-gradient(135deg, #7c2d12, #dc2626)", borderRadius: 14, padding: 16, color: "#fff", textAlign: "center" }}>
+              <div style={{ fontSize: 13, opacity: 0.8 }}>इस महीने सभी मज़दूरों को देना है</div>
+              <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>
+                ₹{getMonthReport().reduce((sum, w) => sum + w.earned, 0)}
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
